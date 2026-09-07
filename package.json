@@ -1,0 +1,26 @@
+{
+  "name": "com.gelalomidze.stratadi",
+  "version": "0.1.0",
+  "displayName": "StrataDI",
+  "description": "A lightweight hierarchical dependency injection library for Unity with project- and scene-level containers, parent fallback, installers, and attribute-based field and method injection.",
+  "unity": "2022.3",
+  "keywords": [
+    "dependency-injection",
+    "di",
+    "ioc",
+    "unity",
+    "architecture"
+  ],
+  "author": {
+    "name": "Gela Lomidze",
+    "url": "https://github.com/GelaLomidze"
+  },
+  "license": "MIT",
+  "samples": [
+    {
+      "displayName": "Basic Injection",
+      "description": "A minimal installer and MonoBehaviour showing field injection and the post-injection callback.",
+      "path": "Samples~/BasicInjection"
+    }
+  ]
+}
