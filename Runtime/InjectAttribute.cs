@@ -3,9 +3,11 @@ using System;
 namespace StrataDI
 {
     /// <summary>
-    /// Marks an instance field, property, or method for dependency injection.
+    /// Marks a constructor, instance field, property, or method
+    /// for dependency injection.
     /// </summary>
     [AttributeUsage(
+        AttributeTargets.Constructor |
         AttributeTargets.Field |
         AttributeTargets.Property |
         AttributeTargets.Method,

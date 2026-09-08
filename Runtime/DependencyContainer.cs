@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Reflection;
 
 namespace StrataDI
 {
@@ -21,6 +22,119 @@ namespace StrataDI
         /// Parent container used as a fallback during resolution.
         /// </summary>
         public DependencyContainer Parent => _parent;
+
+        /// <summary>
+        /// Creates a plain C# object using constructor injection.
+        /// Constructor dependencies must already be registered
+        /// in this container or one of its parents.
+        /// </summary>
+        public T Create<T>() where T : class
+        {
+            return (T)Create(typeof(T));
+        }
+
+        /// <summary>
+        /// Creates a plain C# object using constructor injection.
+        /// Constructor dependencies must already be registered
+        /// in this container or one of its parents.
+        /// </summary>
+        public object Create(Type type)
+        {
+            if (type == null)
+            {
+                throw new ArgumentNullException(nameof(type));
+            }
+
+            if (!type.IsClass)
+            {
+                throw new InvalidOperationException(
+                    $"Type {type.FullName} cannot be created because " +
+                    "constructor injection only supports classes.");
+            }
+
+            if (type.IsAbstract)
+            {
+                throw new InvalidOperationException(
+                    $"Type {type.FullName} cannot be created because it is abstract.");
+            }
+
+            ConstructorInfo constructor = GetInjectionConstructor(type);
+
+            ParameterInfo[] parameters = constructor.GetParameters();
+            object[] arguments = new object[parameters.Length];
+
+            for (int i = 0; i < parameters.Length; i++)
+            {
+                Type dependencyType = parameters[i].ParameterType;
+
+                if (!TryResolve(dependencyType, out object dependency))
+                {
+                    throw new InvalidOperationException(
+                        $"Cannot create {type.FullName}. " +
+                        $"Constructor dependency {dependencyType.FullName} " +
+                        "is not registered in this dependency container " +
+                        "or any parent container.");
+                }
+
+                arguments[i] = dependency;
+            }
+
+            return constructor.Invoke(arguments);
+        }
+
+        private static ConstructorInfo GetInjectionConstructor(Type type)
+        {
+            ConstructorInfo[] constructors = type.GetConstructors(
+                BindingFlags.Instance |
+                BindingFlags.Public |
+                BindingFlags.NonPublic);
+
+            ConstructorInfo injectConstructor = null;
+
+            foreach (ConstructorInfo constructor in constructors)
+            {
+                if (constructor.GetCustomAttribute<InjectAttribute>() == null)
+                {
+                    continue;
+                }
+
+                if (injectConstructor != null)
+                {
+                    throw new InvalidOperationException(
+                        $"Type {type.FullName} has multiple constructors marked " +
+                        $"with [{nameof(InjectAttribute)}]. " +
+                        "Only one injection constructor is allowed.");
+                }
+
+                injectConstructor = constructor;
+            }
+
+            if (injectConstructor != null)
+            {
+                return injectConstructor;
+            }
+
+            ConstructorInfo[] publicConstructors = type.GetConstructors(
+                BindingFlags.Instance |
+                BindingFlags.Public);
+
+            if (publicConstructors.Length == 1)
+            {
+                return publicConstructors[0];
+            }
+
+            if (publicConstructors.Length == 0)
+            {
+                throw new InvalidOperationException(
+                    $"Type {type.FullName} does not have a public constructor. " +
+                    $"Mark one constructor with [{nameof(InjectAttribute)}].");
+            }
+
+            throw new InvalidOperationException(
+                $"Type {type.FullName} has multiple public constructors. " +
+                $"Mark the constructor StrataDI should use with " +
+                $"[{nameof(InjectAttribute)}].");
+        }
 
         /// <summary>
         /// Binds an instance as <typeparamref name="T"/>.
