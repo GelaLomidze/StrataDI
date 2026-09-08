@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Reflection;
 
 namespace StrataDI
 {
@@ -58,14 +57,14 @@ namespace StrataDI
                     $"Type {type.FullName} cannot be created because it is abstract.");
             }
 
-            ConstructorInfo constructor = GetInjectionConstructor(type);
+            ConstructorInjectionMetadata metadata = InjectionMetadataCache.GetConstructorMetadata(type);
 
-            ParameterInfo[] parameters = constructor.GetParameters();
-            object[] arguments = new object[parameters.Length];
+            Type[] parameterTypes = metadata.ParameterTypes;
+            object[] arguments = new object[parameterTypes.Length];
 
-            for (int i = 0; i < parameters.Length; i++)
+            for (int i = 0; i < parameterTypes.Length; i++)
             {
-                Type dependencyType = parameters[i].ParameterType;
+                Type dependencyType = parameterTypes[i];
 
                 if (!TryResolve(dependencyType, out object dependency))
                 {
@@ -79,61 +78,7 @@ namespace StrataDI
                 arguments[i] = dependency;
             }
 
-            return constructor.Invoke(arguments);
-        }
-
-        private static ConstructorInfo GetInjectionConstructor(Type type)
-        {
-            ConstructorInfo[] constructors = type.GetConstructors(
-                BindingFlags.Instance |
-                BindingFlags.Public |
-                BindingFlags.NonPublic);
-
-            ConstructorInfo injectConstructor = null;
-
-            foreach (ConstructorInfo constructor in constructors)
-            {
-                if (constructor.GetCustomAttribute<InjectAttribute>() == null)
-                {
-                    continue;
-                }
-
-                if (injectConstructor != null)
-                {
-                    throw new InvalidOperationException(
-                        $"Type {type.FullName} has multiple constructors marked " +
-                        $"with [{nameof(InjectAttribute)}]. " +
-                        "Only one injection constructor is allowed.");
-                }
-
-                injectConstructor = constructor;
-            }
-
-            if (injectConstructor != null)
-            {
-                return injectConstructor;
-            }
-
-            ConstructorInfo[] publicConstructors = type.GetConstructors(
-                BindingFlags.Instance |
-                BindingFlags.Public);
-
-            if (publicConstructors.Length == 1)
-            {
-                return publicConstructors[0];
-            }
-
-            if (publicConstructors.Length == 0)
-            {
-                throw new InvalidOperationException(
-                    $"Type {type.FullName} does not have a public constructor. " +
-                    $"Mark one constructor with [{nameof(InjectAttribute)}].");
-            }
-
-            throw new InvalidOperationException(
-                $"Type {type.FullName} has multiple public constructors. " +
-                $"Mark the constructor StrataDI should use with " +
-                $"[{nameof(InjectAttribute)}].");
+            return metadata.Constructor.Invoke(arguments);
         }
 
         /// <summary>

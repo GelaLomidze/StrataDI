@@ -39,15 +39,17 @@ namespace StrataDI
                 return;
             }
 
-            if (!CanResolveAllDependencies(target))
+            InjectionMetadata metadata = InjectionMetadataCache.GetInjectionMetadata(target.GetType());
+
+            if (!CanResolveAllDependencies(metadata))
             {
                 AddPendingObject(target);
                 return;
             }
 
-            InjectFields(target);
-            InjectProperties(target);
-            InjectMethods(target);
+            InjectFields(target, metadata);
+            InjectProperties(target, metadata);
+            InjectMethods(target, metadata);
 
             _pendingObjects.Remove(target);
             _completedObjects.Add(target);
@@ -79,9 +81,9 @@ namespace StrataDI
             }
         }
 
-        private bool CanResolveAllDependencies(object target)
+        private bool CanResolveAllDependencies(InjectionMetadata metadata)
         {
-            foreach (FieldInfo field in GetInjectableFields(target.GetType()))
+            foreach (FieldInfo field in metadata.Fields)
             {
                 if (!_container.TryResolve(field.FieldType, out _))
                 {
@@ -89,7 +91,7 @@ namespace StrataDI
                 }
             }
 
-            foreach (PropertyInfo property in GetInjectableProperties(target.GetType()))
+            foreach (PropertyInfo property in metadata.Properties)
             {
                 if (!_container.TryResolve(property.PropertyType, out _))
                 {
@@ -97,13 +99,11 @@ namespace StrataDI
                 }
             }
 
-            foreach (MethodInfo method in GetInjectableMethods(target.GetType()))
+            foreach (MethodInjectionMetadata method in metadata.Methods)
             {
-                ParameterInfo[] parameters = method.GetParameters();
-
-                foreach (ParameterInfo parameter in parameters)
+                foreach (Type parameterType in method.ParameterTypes)
                 {
-                    if (!_container.TryResolve(parameter.ParameterType, out _))
+                    if (!_container.TryResolve(parameterType, out _))
                     {
                         return false;
                     }
@@ -113,38 +113,44 @@ namespace StrataDI
             return true;
         }
 
-        private void InjectFields(object target)
+        private void InjectFields(
+            object target,
+            InjectionMetadata metadata)
         {
-            foreach (FieldInfo field in GetInjectableFields(target.GetType()))
+            foreach (FieldInfo field in metadata.Fields)
             {
                 object dependency = _container.Resolve(field.FieldType);
                 field.SetValue(target, dependency);
             }
         }
 
-        private void InjectProperties(object target)
+        private void InjectProperties(
+            object target,
+            InjectionMetadata metadata)
         {
-            foreach (PropertyInfo property in GetInjectableProperties(target.GetType()))
+            foreach (PropertyInfo property in metadata.Properties)
             {
                 object dependency = _container.Resolve(property.PropertyType);
                 property.SetValue(target, dependency);
             }
         }
 
-        private void InjectMethods(object target)
+        private void InjectMethods(
+            object target,
+            InjectionMetadata metadata)
         {
-            foreach (MethodInfo method in GetInjectableMethods(target.GetType()))
+            foreach (MethodInjectionMetadata method in metadata.Methods)
             {
-                ParameterInfo[] parameters = method.GetParameters();
-                object[] dependencies = new object[parameters.Length];
+                Type[] parameterTypes = method.ParameterTypes;
+                object[] dependencies = new object[parameterTypes.Length];
 
-                for (int i = 0; i < parameters.Length; i++)
+                for (int i = 0; i < parameterTypes.Length; i++)
                 {
                     dependencies[i] =
-                        _container.Resolve(parameters[i].ParameterType);
+                        _container.Resolve(parameterTypes[i]);
                 }
 
-                method.Invoke(target, dependencies);
+                method.Method.Invoke(target, dependencies);
             }
         }
 
@@ -153,103 +159,6 @@ namespace StrataDI
             if (!_pendingObjects.Contains(target))
             {
                 _pendingObjects.Add(target);
-            }
-        }
-
-        private static void ValidateInjectableProperty(PropertyInfo property)
-        {
-            if (property.GetIndexParameters().Length > 0)
-            {
-                throw new InvalidOperationException(
-                    $"Property {property.DeclaringType?.FullName}.{property.Name} " +
-                    "cannot be injected because indexer properties are not supported.");
-            }
-
-            if (property.GetSetMethod(true) == null)
-            {
-                throw new InvalidOperationException(
-                    $"Property {property.DeclaringType?.FullName}.{property.Name} " +
-                    "cannot be injected because it does not have a setter.");
-            }
-        }
-
-        private static IEnumerable<FieldInfo> GetInjectableFields(Type targetType)
-        {
-            foreach (Type type in EnumerateTypeHierarchy(targetType))
-            {
-                FieldInfo[] fields = type.GetFields(
-                    BindingFlags.Instance |
-                    BindingFlags.Public |
-                    BindingFlags.NonPublic |
-                    BindingFlags.DeclaredOnly);
-
-                foreach (FieldInfo field in fields)
-                {
-                    if (field.GetCustomAttribute<InjectAttribute>() != null)
-                    {
-                        yield return field;
-                    }
-                }
-            }
-        }
-
-        private static IEnumerable<PropertyInfo> GetInjectableProperties(Type targetType)
-        {
-            foreach (Type type in EnumerateTypeHierarchy(targetType))
-            {
-                PropertyInfo[] properties = type.GetProperties(
-                    BindingFlags.Instance |
-                    BindingFlags.Public |
-                    BindingFlags.NonPublic |
-                    BindingFlags.DeclaredOnly);
-
-                foreach (PropertyInfo property in properties)
-                {
-                    if (property.GetCustomAttribute<InjectAttribute>() == null)
-                    {
-                        continue;
-                    }
-
-                    ValidateInjectableProperty(property);
-                    yield return property;
-                }
-            }
-        }
-
-        private static IEnumerable<MethodInfo> GetInjectableMethods(Type targetType)
-        {
-            foreach (Type type in EnumerateTypeHierarchy(targetType))
-            {
-                MethodInfo[] methods = type.GetMethods(
-                    BindingFlags.Instance |
-                    BindingFlags.Public |
-                    BindingFlags.NonPublic |
-                    BindingFlags.DeclaredOnly);
-
-                foreach (MethodInfo method in methods)
-                {
-                    if (method.GetCustomAttribute<InjectAttribute>() != null)
-                    {
-                        yield return method;
-                    }
-                }
-            }
-        }
-
-        private static IEnumerable<Type> EnumerateTypeHierarchy(Type targetType)
-        {
-            Stack<Type> hierarchy = new();
-            Type currentType = targetType;
-
-            while (currentType != null && currentType != typeof(MonoBehaviour))
-            {
-                hierarchy.Push(currentType);
-                currentType = currentType.BaseType;
-            }
-
-            while (hierarchy.Count > 0)
-            {
-                yield return hierarchy.Pop();
             }
         }
     }
