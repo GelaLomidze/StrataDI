@@ -3,10 +3,12 @@ using System;
 namespace StrataDI
 {
     /// <summary>
-    /// Marks an instance field or instance method for dependency injection.
+    /// Marks an instance field, property, or method for dependency injection.
     /// </summary>
     [AttributeUsage(
-        AttributeTargets.Field | AttributeTargets.Method,
+        AttributeTargets.Field |
+        AttributeTargets.Property |
+        AttributeTargets.Method,
         AllowMultiple = false,
         Inherited = true)]
     public sealed class InjectAttribute : Attribute
