@@ -46,6 +46,7 @@ namespace StrataDI
             }
 
             InjectFields(target);
+            InjectProperties(target);
             InjectMethods(target);
 
             _pendingObjects.Remove(target);
@@ -88,6 +89,14 @@ namespace StrataDI
                 }
             }
 
+            foreach (PropertyInfo property in GetInjectableProperties(target.GetType()))
+            {
+                if (!_container.TryResolve(property.PropertyType, out _))
+                {
+                    return false;
+                }
+            }
+
             foreach (MethodInfo method in GetInjectableMethods(target.GetType()))
             {
                 ParameterInfo[] parameters = method.GetParameters();
@@ -110,6 +119,15 @@ namespace StrataDI
             {
                 object dependency = _container.Resolve(field.FieldType);
                 field.SetValue(target, dependency);
+            }
+        }
+
+        private void InjectProperties(object target)
+        {
+            foreach (PropertyInfo property in GetInjectableProperties(target.GetType()))
+            {
+                object dependency = _container.Resolve(property.PropertyType);
+                property.SetValue(target, dependency);
             }
         }
 
@@ -138,6 +156,23 @@ namespace StrataDI
             }
         }
 
+        private static void ValidateInjectableProperty(PropertyInfo property)
+        {
+            if (property.GetIndexParameters().Length > 0)
+            {
+                throw new InvalidOperationException(
+                    $"Property {property.DeclaringType?.FullName}.{property.Name} " +
+                    "cannot be injected because indexer properties are not supported.");
+            }
+
+            if (property.GetSetMethod(true) == null)
+            {
+                throw new InvalidOperationException(
+                    $"Property {property.DeclaringType?.FullName}.{property.Name} " +
+                    "cannot be injected because it does not have a setter.");
+            }
+        }
+
         private static IEnumerable<FieldInfo> GetInjectableFields(Type targetType)
         {
             foreach (Type type in EnumerateTypeHierarchy(targetType))
@@ -154,6 +189,29 @@ namespace StrataDI
                     {
                         yield return field;
                     }
+                }
+            }
+        }
+
+        private static IEnumerable<PropertyInfo> GetInjectableProperties(Type targetType)
+        {
+            foreach (Type type in EnumerateTypeHierarchy(targetType))
+            {
+                PropertyInfo[] properties = type.GetProperties(
+                    BindingFlags.Instance |
+                    BindingFlags.Public |
+                    BindingFlags.NonPublic |
+                    BindingFlags.DeclaredOnly);
+
+                foreach (PropertyInfo property in properties)
+                {
+                    if (property.GetCustomAttribute<InjectAttribute>() == null)
+                    {
+                        continue;
+                    }
+
+                    ValidateInjectableProperty(property);
+                    yield return property;
                 }
             }
         }
