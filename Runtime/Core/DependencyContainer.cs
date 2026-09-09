@@ -5,14 +5,18 @@ namespace StrataDI
 {
     /// <summary>
     /// Stores dependency instances and resolves them by type.
-    /// If a dependency is not registered locally, resolution falls back to the parent container.
+    /// If a dependency is not registered locally, resolution falls back
+    /// to the parent container.
     /// </summary>
     public sealed class DependencyContainer
     {
         private readonly Dictionary<Type, object> _instances = new();
         private readonly DependencyContainer _parent;
 
-        public DependencyContainer(DependencyContainer parent = null)
+        private readonly ObjectArrayPool _argumentPool = new();
+
+        public DependencyContainer(
+            DependencyContainer parent = null)
         {
             _parent = parent;
         }
@@ -54,36 +58,51 @@ namespace StrataDI
             if (type.IsAbstract)
             {
                 throw new InvalidOperationException(
-                    $"Type {type.FullName} cannot be created because it is abstract.");
+                    $"Type {type.FullName} cannot be created because " +
+                    "it is abstract.");
             }
 
-            ConstructorInjectionMetadata metadata = InjectionMetadataCache.GetConstructorMetadata(type);
+            ConstructorInjectionMetadata metadata =
+                InjectionMetadataCache.GetConstructorMetadata(type);
 
             Type[] parameterTypes = metadata.ParameterTypes;
-            object[] arguments = new object[parameterTypes.Length];
 
-            for (int i = 0; i < parameterTypes.Length; i++)
+            object[] arguments =
+                _argumentPool.Rent(parameterTypes.Length);
+
+            try
             {
-                Type dependencyType = parameterTypes[i];
-
-                if (!TryResolve(dependencyType, out object dependency))
+                for (int i = 0; i < parameterTypes.Length; i++)
                 {
-                    throw new InvalidOperationException(
-                        $"Cannot create {type.FullName}. " +
-                        $"Constructor dependency {dependencyType.FullName} " +
-                        "is not registered in this dependency container " +
-                        "or any parent container.");
+                    Type dependencyType =
+                        parameterTypes[i];
+
+                    if (!TryResolve(
+                            dependencyType,
+                            out object dependency))
+                    {
+                        throw new InvalidOperationException(
+                            $"Cannot create {type.FullName}. " +
+                            $"Constructor dependency {dependencyType.FullName} " +
+                            "is not registered in this dependency container " +
+                            "or any parent container.");
+                    }
+
+                    arguments[i] = dependency;
                 }
 
-                arguments[i] = dependency;
+                return metadata.Constructor.Invoke(arguments);
             }
-
-            return metadata.Constructor.Invoke(arguments);
+            finally
+            {
+                _argumentPool.Return(arguments);
+            }
         }
 
         /// <summary>
         /// Binds an instance as <typeparamref name="T"/>.
-        /// Use this overload to bind an implementation to an interface or base type.
+        /// Use this overload to bind an implementation to an interface
+        /// or base type.
         /// </summary>
         public void Bind<T>(T instance)
         {
@@ -109,7 +128,8 @@ namespace StrataDI
             if (!type.IsInstanceOfType(instance))
             {
                 throw new ArgumentException(
-                    $"Instance of type {instance.GetType().FullName} cannot be bound as {type.FullName}.",
+                    $"Instance of type {instance.GetType().FullName} " +
+                    $"cannot be bound as {type.FullName}.",
                     nameof(instance));
             }
 
@@ -148,16 +168,19 @@ namespace StrataDI
             }
 
             throw new InvalidOperationException(
-                $"Type {type.FullName} is not registered in this dependency container " +
-                "or any parent container.");
+                $"Type {type.FullName} is not registered in this " +
+                "dependency container or any parent container.");
         }
 
         /// <summary>
-        /// Attempts to resolve a dependency without throwing when it is missing.
+        /// Attempts to resolve a dependency without throwing
+        /// when it is missing.
         /// </summary>
         public bool TryResolve<T>(out T result)
         {
-            if (TryResolve(typeof(T), out object instance))
+            if (TryResolve(
+                    typeof(T),
+                    out object instance))
             {
                 result = (T)instance;
                 return true;
@@ -168,23 +191,30 @@ namespace StrataDI
         }
 
         /// <summary>
-        /// Attempts to resolve a dependency without throwing when it is missing.
+        /// Attempts to resolve a dependency without throwing
+        /// when it is missing.
         /// </summary>
-        public bool TryResolve(Type type, out object instance)
+        public bool TryResolve(
+            Type type,
+            out object instance)
         {
             if (type == null)
             {
                 throw new ArgumentNullException(nameof(type));
             }
 
-            if (_instances.TryGetValue(type, out instance))
+            if (_instances.TryGetValue(
+                    type,
+                    out instance))
             {
                 return true;
             }
 
             if (_parent != null)
             {
-                return _parent.TryResolve(type, out instance);
+                return _parent.TryResolve(
+                    type,
+                    out instance);
             }
 
             instance = null;
