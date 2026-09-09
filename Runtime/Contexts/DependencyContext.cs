@@ -5,7 +5,8 @@ namespace StrataDI
 {
     /// <summary>
     /// Scene-level dependency context.
-    /// Creates a container whose parent is the optional project-level container.
+    /// Creates a container whose parent is the optional
+    /// project-level container.
     /// </summary>
     [DefaultExecutionOrder(-10000)]
     public sealed class DependencyContext : MonoBehaviour
@@ -21,8 +22,9 @@ namespace StrataDI
             {
                 if (_instance == null)
                 {
-                    _instance = FindAnyObjectByType<DependencyContext>(
-                        FindObjectsInactive.Include);
+                    _instance =
+                        FindAnyObjectByType<DependencyContext>(
+                            FindObjectsInactive.Include);
 
                     if (_instance == null)
                     {
@@ -48,7 +50,8 @@ namespace StrataDI
             }
         }
 
-        [SerializeField] private DependencyInstaller[] _installers =
+        [SerializeField]
+        private DependencyInstaller[] _installers =
             Array.Empty<DependencyInstaller>();
 
         private DependencyContainer _container;
@@ -57,10 +60,12 @@ namespace StrataDI
 
         private void Awake()
         {
-            if (_instance != null && _instance != this)
+            if (_instance != null &&
+                _instance != this)
             {
                 Debug.LogError(
-                    "StrataDI currently supports one active DependencyContext at a time. " +
+                    "StrataDI currently supports one active " +
+                    "DependencyContext at a time. " +
                     $"Destroying duplicate context on '{gameObject.name}'.",
                     this);
 
@@ -89,13 +94,14 @@ namespace StrataDI
 
             _isInitialized = true;
 
-            // ProjectDependencyContext is optional. Without it, this scene
-            // context operates as a standalone dependency container.
             ProjectDependencyContext.TryGetContainer(
                 out DependencyContainer projectContainer);
 
-            _container = new DependencyContainer(projectContainer);
-            _injector = new DependencyInjector(_container);
+            _container =
+                new DependencyContainer(projectContainer);
+
+            _injector =
+                new DependencyInjector(_container);
 
             _container.Bind(this);
 
@@ -118,7 +124,8 @@ namespace StrataDI
 
         private void InjectSceneObjects()
         {
-            foreach (GameObject rootObject in gameObject.scene.GetRootGameObjects())
+            foreach (GameObject rootObject
+                     in gameObject.scene.GetRootGameObjects())
             {
                 _injector.InjectGameObject(rootObject);
             }
@@ -127,12 +134,14 @@ namespace StrataDI
         }
 
         /// <summary>
-        /// Instantiates a component prefab, binds all MonoBehaviours on the spawned hierarchy
-        /// by concrete type, and injects the hierarchy.
+        /// Instantiates a component prefab, binds all MonoBehaviours
+        /// on the spawned hierarchy by concrete type,
+        /// and injects the hierarchy.
         /// </summary>
-        public T Instantiate<T>(
+        public new T Instantiate<T>(
             T prefab,
-            Transform parent = null) where T : Component
+            Transform parent = null)
+            where T : Component
         {
             if (prefab == null)
             {
@@ -141,31 +150,37 @@ namespace StrataDI
 
             T instance = UnityEngine.Object.Instantiate(prefab, parent);
             BindAndInjectGameObject(instance.gameObject);
+
             return instance;
         }
 
         /// <summary>
-        /// Instantiates a component prefab, binds all MonoBehaviours on the spawned hierarchy
-        /// by concrete type, and injects the hierarchy.
+        /// Instantiates a component prefab, binds all MonoBehaviours
+        /// on the spawned hierarchy by concrete type,
+        /// and injects the hierarchy.
         /// </summary>
-        public T Instantiate<T>(
+        public new T Instantiate<T>(
             T prefab,
             Vector3 position,
             Quaternion rotation,
-            Transform parent = null) where T : Component
+            Transform parent = null)
+            where T : Component
         {
             if (prefab == null)
             {
                 throw new ArgumentNullException(nameof(prefab));
             }
 
-            T instance = UnityEngine.Object.Instantiate(
-                prefab,
-                position,
-                rotation,
-                parent);
+            T instance =
+                UnityEngine.Object.Instantiate(
+                    prefab,
+                    position,
+                    rotation,
+                    parent);
 
-            BindAndInjectGameObject(instance.gameObject);
+            BindAndInjectGameObject(
+                instance.gameObject);
+
             return instance;
         }
 
@@ -176,8 +191,7 @@ namespace StrataDI
                 return;
             }
 
-            BindSpawnedComponents(gameObject);
-            InjectGameObject(gameObject);
+            _injector.BindAndInjectGameObject(gameObject);
             _injector.RetryPendingObjects();
         }
 
@@ -189,7 +203,10 @@ namespace StrataDI
             }
 
             _container.BindInstance(component);
-            _injector.TryInjectAndNotify(component as MonoBehaviour);
+
+            _injector.TryInjectAndNotify(
+                component as MonoBehaviour);
+
             _injector.RetryPendingObjects();
         }
 
@@ -200,18 +217,7 @@ namespace StrataDI
                 return;
             }
 
-            MonoBehaviour[] components =
-                gameObject.GetComponentsInChildren<MonoBehaviour>(true);
-
-            foreach (MonoBehaviour component in components)
-            {
-                if (component == null)
-                {
-                    continue;
-                }
-
-                _container.BindInstance(component);
-            }
+            _injector.BindGameObject(gameObject);
         }
 
         public void InjectGameObject(GameObject gameObject)
