@@ -1,10 +1,11 @@
 using System;
+using UnityEngine.Scripting;
 
 namespace StrataDI
 {
     /// <summary>
     /// Marks a constructor, instance field, property, or method
-    /// for dependency injection.
+    /// for dependency injection and preserves it from managed code stripping.
     /// </summary>
     [AttributeUsage(
         AttributeTargets.Constructor |
@@ -13,7 +14,7 @@ namespace StrataDI
         AttributeTargets.Method,
         AllowMultiple = false,
         Inherited = true)]
-    public sealed class InjectAttribute : Attribute
+    public sealed class InjectAttribute : PreserveAttribute
     {
     }
 }
