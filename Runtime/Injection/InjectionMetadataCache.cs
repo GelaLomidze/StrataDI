@@ -82,7 +82,7 @@ namespace StrataDI
 
             foreach (FieldInfo field in fields)
             {
-                if (field.GetCustomAttribute<InjectAttribute>() != null)
+                if (field.GetCustomAttribute<InjectAttribute>(inherit: false) != null)
                 {
                     result.Add(field);
                 }
@@ -101,7 +101,7 @@ namespace StrataDI
 
             foreach (PropertyInfo property in properties)
             {
-                if (property.GetCustomAttribute<InjectAttribute>() == null)
+                if (property.GetCustomAttribute<InjectAttribute>(inherit: false) == null)
                 {
                     continue;
                 }
@@ -123,7 +123,7 @@ namespace StrataDI
 
             foreach (MethodInfo method in methods)
             {
-                if (method.GetCustomAttribute<InjectAttribute>() == null)
+                if (method.GetCustomAttribute<InjectAttribute>(inherit: false) == null)
                 {
                     continue;
                 }
@@ -172,7 +172,7 @@ namespace StrataDI
 
             foreach (ConstructorInfo constructor in constructors)
             {
-                if (constructor.GetCustomAttribute<InjectAttribute>() == null)
+                if (constructor.GetCustomAttribute<InjectAttribute>(inherit: false) == null)
                 {
                     continue;
                 }

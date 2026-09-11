@@ -17,6 +17,8 @@ namespace StrataDI
         private readonly Stack<List<object>> _dependencyBufferPool = new();
 
         private readonly ObjectArrayPool _argumentPool = new();
+        
+        private bool _isRetryingPending;
 
         public DependencyInjector(DependencyContainer container)
         {
@@ -144,19 +146,33 @@ namespace StrataDI
 
         public void RetryPendingObjects()
         {
-            for (int i = _pendingObjects.Count - 1; i >= 0; i--)
+            if (_isRetryingPending)
             {
-                MonoBehaviour pendingObject =
-                    _pendingObjects[i];
+                return;
+            }
 
-                if (pendingObject == null)
+            _isRetryingPending = true;
+
+            try
+            {
+                for (int i = _pendingObjects.Count - 1; i >= 0; i--)
                 {
-                    _pendingLookup.Remove(pendingObject);
-                    _pendingObjects.RemoveAt(i);
-                    continue;
-                }
+                    MonoBehaviour pendingObject =
+                        _pendingObjects[i];
 
-                TryInjectAndNotify(pendingObject);
+                    if (pendingObject == null)
+                    {
+                        _pendingLookup.Remove(pendingObject);
+                        _pendingObjects.RemoveAt(i);
+                        continue;
+                    }
+
+                    TryInjectAndNotify(pendingObject);
+                }
+            }
+            finally
+            {
+                _isRetryingPending = false;
             }
         }
 
