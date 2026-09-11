@@ -2,13 +2,21 @@ using UnityEngine;
 
 namespace StrataDI.Samples
 {
-    public sealed class ClockDisplay : MonoBehaviour, IInjectionCallback
+    /// <summary>
+    /// Demonstrates private field injection and the post-injection callback.
+    /// </summary>
+    public sealed class ClockDisplay :
+        MonoBehaviour,
+        IInjectionCallback
     {
-        [Inject] private IGameClock _gameClock;
+        [Inject]
+        private IGameClock _gameClock;
 
         public void OnInjected()
         {
-            Debug.Log($"StrataDI injected the clock at time {_gameClock.Time:0.00}.", this);
+            Debug.Log(
+                $"Field injection: {_gameClock.Time:0.00}",
+                this);
         }
     }
 }
