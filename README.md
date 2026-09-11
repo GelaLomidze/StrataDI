@@ -2,7 +2,9 @@
 
 **Lightweight hierarchical dependency injection for Unity.**
 
-StrataDI provides a small instance-based DI container designed around Unity's project and scene structure. A scene container can inherit from an optional persistent project container, so dependencies resolve locally first and fall back to the parent when needed.
+StrataDI is a small dependency injection library designed around Unity's project and scene structure. It provides project-level and scene-level containers, parent fallback, installer-based bindings, reflection-based component injection, and explicit constructor injection for plain C# classes.
+
+StrataDI is intended for Unity projects that want dependency injection without adopting a large dependency-management framework.
 
 ## Features
 
@@ -11,10 +13,15 @@ StrataDI provides a small instance-based DI container designed around Unity's pr
 - Optional persistent project-level dependencies
 - Scene-level dependency contexts
 - `[Inject]` field injection
+- `[Inject]` property injection, including private setters
 - `[Inject]` method injection
+- Explicit `[Inject]` constructor injection for plain C# classes
 - Installer-based bindings
 - Post-injection callback via `IInjectionCallback`
-- Runtime GameObject/prefab injection helpers
+- Runtime GameObject/prefab binding and injection helpers
+- Reflection metadata caching
+- Reduced temporary allocations through reusable buffers and pooled argument arrays
+- Managed-code stripping protection for `[Inject]` members
 - No external runtime dependencies
 
 ## Requirements
@@ -23,27 +30,29 @@ StrataDI provides a small instance-based DI container designed around Unity's pr
 
 ## Installation
 
-### Git URL
+### Unity Package Manager
 
-After this repository is published, add its Git URL through Unity Package Manager:
+Open:
 
 `Window → Package Manager → + → Add package from git URL...`
 
-Then enter your repository URL, for example:
+For the stable `0.2.0` release, use:
 
 ```text
-https://github.com/GelaLomidze/StrataDI.git
+https://github.com/GelaLomidze/StrataDI.git#v0.2.0
 ```
 
-You can also add it directly to `Packages/manifest.json`:
+You can also add the package directly to `Packages/manifest.json`:
 
 ```json
 {
   "dependencies": {
-    "com.gelalomidze.stratadi": "https://github.com/GelaLomidze/StrataDI.git"
+    "com.gelalomidze.stratadi": "https://github.com/GelaLomidze/StrataDI.git#v0.2.0"
   }
 }
 ```
+
+Using a release tag is recommended so your project stays on a known StrataDI version.
 
 ## Quick start
 
@@ -76,9 +85,11 @@ using UnityEngine;
 
 public sealed class GameInstaller : DependencyInstaller
 {
-    [SerializeField] private AudioService _audioService;
+    [SerializeField]
+    private AudioService _audioService;
 
-    public override void InstallBindings(DependencyContainer container)
+    public override void InstallBindings(
+        DependencyContainer container)
     {
         container.Bind<IAudioService>(_audioService);
     }
@@ -87,9 +98,9 @@ public sealed class GameInstaller : DependencyInstaller
 
 Add `DependencyContext` to a GameObject in the scene and assign `GameInstaller` to its installer list.
 
-### 3. Inject it
+### 3. Inject it into a component
 
-Field injection:
+#### Field injection
 
 ```csharp
 using StrataDI;
@@ -97,7 +108,8 @@ using UnityEngine;
 
 public sealed class Player : MonoBehaviour
 {
-    [Inject] private IAudioService _audioService;
+    [Inject]
+    private IAudioService _audioService;
 
     private void Start()
     {
@@ -106,7 +118,29 @@ public sealed class Player : MonoBehaviour
 }
 ```
 
-Method injection:
+#### Property injection
+
+```csharp
+using StrataDI;
+using UnityEngine;
+
+public sealed class Player : MonoBehaviour
+{
+    [Inject]
+    public IAudioService AudioService
+    {
+        get;
+        private set;
+    }
+
+    private void Start()
+    {
+        AudioService.Play("spawn");
+    }
+}
+```
+
+#### Method injection
 
 ```csharp
 using StrataDI;
@@ -117,7 +151,8 @@ public sealed class Player : MonoBehaviour
     private IAudioService _audioService;
 
     [Inject]
-    private void Construct(IAudioService audioService)
+    private void Construct(
+        IAudioService audioService)
     {
         _audioService = audioService;
     }
@@ -130,16 +165,79 @@ public sealed class Player : MonoBehaviour
 using StrataDI;
 using UnityEngine;
 
-public sealed class Player : MonoBehaviour, IInjectionCallback
+public sealed class Player :
+    MonoBehaviour,
+    IInjectionCallback
 {
-    [Inject] private IAudioService _audioService;
+    [Inject]
+    private IAudioService _audioService;
 
     public void OnInjected()
     {
-        // All [Inject] fields and methods are resolved before this callback.
+        // Fields, properties, and methods have already been injected.
     }
 }
 ```
+
+For component injection, StrataDI applies injection in this order:
+
+```text
+Fields
+→ Properties
+→ Methods
+→ IInjectionCallback.OnInjected()
+```
+
+StrataDI resolves all required dependencies before applying them to the target. If a dependency is not available yet, the component can remain pending and be retried later when context APIs trigger another retry.
+
+## Constructor injection
+
+`DependencyContainer.Create<T>()` can create plain C# classes through constructor injection.
+
+Constructor injection is explicit: the target class must have exactly one constructor marked with `[Inject]`.
+
+```csharp
+using StrataDI;
+
+public sealed class SaveService
+{
+    private readonly IStorage _storage;
+
+    [Inject]
+    public SaveService(
+        IStorage storage)
+    {
+        _storage = storage;
+    }
+}
+```
+
+Create it from a container:
+
+```csharp
+SaveService saveService =
+    container.Create<SaveService>();
+```
+
+Private constructors are also supported:
+
+```csharp
+public sealed class SaveService
+{
+    private readonly IStorage _storage;
+
+    [Inject]
+    private SaveService(
+        IStorage storage)
+    {
+        _storage = storage;
+    }
+}
+```
+
+Constructor dependencies must already be registered in the current container or one of its parents.
+
+StrataDI does not recursively construct missing dependencies and does not automatically register objects created through `Create<T>()`.
 
 ## Project and scene hierarchy
 
@@ -151,9 +249,9 @@ ProjectDependencyContext
             └── Injected scene objects
 ```
 
-When a dependency is requested, the scene container checks itself first. If it cannot resolve the type, it falls back to the project container.
+When a dependency is requested, the scene container checks itself first. If the type is not registered locally, resolution falls back to the parent project container.
 
-This means a scene can override a project binding simply by registering the same service type locally.
+This allows a scene to override a project-level binding by registering the same service type locally.
 
 ## Project-wide dependencies
 
@@ -165,26 +263,45 @@ To enable them, create:
 Assets/Resources/StrataDI/ProjectDependencyContext.prefab
 ```
 
-Add `ProjectDependencyContext` to the prefab and configure project dependencies/installers. The context is created before scene loading and persists with `DontDestroyOnLoad`.
+Add `ProjectDependencyContext` to the prefab and configure project dependencies and installers in the Inspector.
+
+The project context is created before scene loading and persists through `DontDestroyOnLoad`.
 
 If no project context prefab exists, a scene `DependencyContext` works as a standalone container.
 
+A project context can also inject a loaded scene that does not contain an active `DependencyContext`.
+
 ## Runtime-instantiated objects
 
-Objects created after initial scene injection need to be injected explicitly. Prefer:
+Objects created after initial scene injection must be injected explicitly.
+
+Prefer:
 
 ```csharp
-Enemy enemy = DependencyContext.Instance.Instantiate(enemyPrefab, parent);
+Enemy enemy =
+    DependencyContext.Instance.Instantiate(
+        enemyPrefab,
+        parent);
 ```
 
 or:
 
 ```csharp
-GameObject instance = Instantiate(prefab);
-DependencyContext.Instance.BindAndInjectGameObject(instance);
+GameObject instance =
+    Instantiate(prefab);
+
+DependencyContext.Instance
+    .BindAndInjectGameObject(instance);
 ```
 
-`BindAndInjectGameObject` binds MonoBehaviours on the spawned hierarchy by their concrete types and then performs injection.
+`BindAndInjectGameObject` traverses the hierarchy once, binds its `MonoBehaviour` components by concrete runtime type, then injects those components.
+
+You can also bind and inject a single component:
+
+```csharp
+DependencyContext.Instance
+    .BindAndInjectComponent(component);
+```
 
 ## Binding APIs
 
@@ -194,44 +311,90 @@ Bind a concrete type:
 container.Bind(audioService);
 ```
 
-Bind an implementation as an interface/base type:
+Bind an implementation as an interface or base type:
 
 ```csharp
-container.Bind<IAudioService>(audioService);
+container.Bind<IAudioService>(
+    audioService);
 ```
 
-Resolve directly when needed:
+Bind an object using its concrete runtime type:
 
 ```csharp
-IAudioService audio = container.Resolve<IAudioService>();
+container.BindInstance(audioService);
 ```
 
-Or safely:
+Resolve directly:
 
 ```csharp
-if (container.TryResolve<IAudioService>(out IAudioService audio))
+IAudioService audio =
+    container.Resolve<IAudioService>();
+```
+
+Resolve safely:
+
+```csharp
+if (container.TryResolve<IAudioService>(
+        out IAudioService audio))
 {
     audio.Play("click");
 }
 ```
 
+A local binding replaces any previous local binding for the same service type. Parent bindings remain available as fallback when a service is not registered locally.
+
+## IL2CPP and managed stripping
+
+StrataDI discovers injectable members through reflection.
+
+`InjectAttribute` derives from Unity's `PreserveAttribute`, so constructors, fields, properties, and methods marked with `[Inject]` are protected from managed-code stripping.
+
+This is also why constructor injection requires an explicit `[Inject]` constructor rather than relying on automatic public-constructor discovery.
+
+StrataDI `0.2.0` has been verified with a Windows IL2CPP player using High managed stripping for:
+
+- private field injection
+- property injection
+- private method injection
+- private constructor injection
+
 ## Injection timing
 
-Do not rely on injected dependencies inside `Awake`.
+Do not rely on injected component dependencies inside `Awake`.
 
-Scene injection is intended to make dependencies available before normal gameplay initialization such as `Start`. The project context can also inject a scene after it has loaded when that scene has no active `DependencyContext`.
+`DependencyContext` initializes early and performs scene injection before normal gameplay initialization such as `Start`, but Unity may invoke a component's own `Awake` before StrataDI injects it.
+
+Use `Start`, `IInjectionCallback.OnInjected()`, or another post-injection path when initialization depends on injected values.
+
+## Current limitations
+
+StrataDI intentionally keeps its API small. Version `0.2.0` does not currently provide:
+
+- transient/scoped/singleton lifetime registrations
+- factories
+- recursive automatic object-graph construction
+- automatic registration of objects created through `Create<T>()`
+- multiple bindings or collection injection for the same service type
+- automatic injection for objects instantiated through regular `Object.Instantiate`
+- multiple simultaneously active scene `DependencyContext` scopes
+- automatic disposal or unbinding lifecycle
+- thread-safe container access
+- source-generated injection
+
+StrataDI currently supports one active scene `DependencyContext` at a time.
 
 ## Design goals
 
-StrataDI intentionally focuses on a small API and predictable Unity integration. Version `0.1.x` does **not** include:
+StrataDI focuses on:
 
-- transient/scoped/singleton lifetime registration
-- automatic constructor injection
-- property injection
-- factories or automatic object construction
-- multiple active additive-scene dependency contexts
+- a small public API
+- predictable Unity integration
+- project → scene dependency hierarchy
+- support for serialized `MonoBehaviour` workflows
+- explicit behavior that is easy to inspect and own
+- low runtime overhead without introducing a large framework
 
-Those features should only be added when they solve a concrete Unity workflow rather than to imitate larger DI frameworks.
+Advanced DI features should be added only when they solve a concrete Unity workflow.
 
 ## License
 
