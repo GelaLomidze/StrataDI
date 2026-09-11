@@ -172,7 +172,8 @@ namespace StrataDI
 
             foreach (ConstructorInfo constructor in constructors)
             {
-                if (constructor.GetCustomAttribute<InjectAttribute>(inherit: false) == null)
+                if (constructor.GetCustomAttribute<InjectAttribute>(
+                        inherit: false) == null)
                 {
                     continue;
                 }
@@ -193,26 +194,11 @@ namespace StrataDI
                 return injectConstructor;
             }
 
-            ConstructorInfo[] publicConstructors = type.GetConstructors(
-                BindingFlags.Instance |
-                BindingFlags.Public);
-
-            if (publicConstructors.Length == 1)
-            {
-                return publicConstructors[0];
-            }
-
-            if (publicConstructors.Length == 0)
-            {
-                throw new InvalidOperationException(
-                    $"Type {type.FullName} does not have a public constructor. " +
-                    $"Mark one constructor with [{nameof(InjectAttribute)}].");
-            }
-
             throw new InvalidOperationException(
-                $"Type {type.FullName} has multiple public constructors. " +
-                "Mark the constructor StrataDI should use with " +
-                $"[{nameof(InjectAttribute)}].");
+                $"Type {type.FullName} does not have a constructor marked with " +
+                $"[{nameof(InjectAttribute)}]. " +
+                "Constructor injection requires exactly one explicit " +
+                $"[{nameof(InjectAttribute)}] constructor.");
         }
 
         private static void ValidateInjectableProperty(PropertyInfo property)
