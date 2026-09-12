@@ -36,7 +36,6 @@ jobs:
           projectPath: TestProject~
           unityVersion: 6000.3.7f1
           testMode: All
-          coverageEnabled: false
           artifactsPath: artifacts
           githubToken: ${{ secrets.GITHUB_TOKEN }}
           checkName: StrataDI Tests
