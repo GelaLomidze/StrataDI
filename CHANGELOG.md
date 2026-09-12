@@ -4,7 +4,7 @@ All notable changes to StrataDI will be documented in this file.
 
 The format is based on Keep a Changelog and this project follows Semantic Versioning.
 
-## [0.2.0] - 2026-09-11
+## [0.2.0] - 2026-09-12
 
 ### Added
 
